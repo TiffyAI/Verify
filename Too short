@@ -1,0 +1,66 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.20;
+
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract TiffyAIMaster is Ownable {
+    IERC20 public tiffyToken;
+    address public rewardWallet;
+    uint256 public cooldownTime = 1 days;
+
+    struct Player {
+        uint256 lastClaim;
+        uint256 blueKeys;
+        uint256 goldKeys;
+    }
+
+    mapping(address => Player) public players;
+
+    event ClaimedTreasure(address indexed user, uint256 amount);
+    event SlotWin(address indexed user, uint256 amount);
+    event GameCreated(uint256 gameId);
+    
+    constructor(address _token, address _rewardWallet) Ownable(msg.sender) {
+        tiffyToken = IERC20(_token);
+        rewardWallet = _rewardWallet;
+    }
+
+    modifier cooldownPassed(address user) {
+        require(block.timestamp >= players[user].lastClaim + cooldownTime, "Cooldown not passed");
+        _;
+    }
+
+    function claimTreasure(uint256 amount) external cooldownPassed(msg.sender) {
+        require(tiffyToken.balanceOf(rewardWallet) >= amount, "Insufficient rewards");
+        players[msg.sender].lastClaim = block.timestamp;
+        players[msg.sender].blueKeys += 1;
+
+        if (players[msg.sender].blueKeys % 10 == 0) {
+            players[msg.sender].goldKeys += 1;
+        }
+
+        tiffyToken.transferFrom(rewardWallet, msg.sender, amount);
+        emit ClaimedTreasure(msg.sender, amount);
+    }
+
+    function playSlots(uint256 amount, bool win) external {
+        require(tiffyToken.balanceOf(rewardWallet) >= amount, "Insufficient rewards");
+        require(win, "You didn't win");
+
+        tiffyToken.transferFrom(rewardWallet, msg.sender, amount);
+        emit SlotWin(msg.sender, amount);
+    }
+
+    function setCooldown(uint256 _cooldown) external onlyOwner {
+        cooldownTime = _cooldown;
+    }
+
+    function setRewardWallet(address _wallet) external onlyOwner {
+        rewardWallet = _wallet;
+    }
+
+    function withdrawTokens(uint256 amount) external onlyOwner {
+        tiffyToken.transfer(msg.sender, amount);
+    }
+}
