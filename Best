@@ -1,0 +1,59 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+contract TiffyAI is ERC20, Ownable {
+    uint256 public constant MAX_SUPPLY = 10_000_000 * 1e18;
+    uint256 public constant CLAIM_FEE_BNB = 0.0012 ether; // ~$0.40
+
+    address public growthWallet;
+    address public liquidityWallet;
+    address public bestowedBlessingsWallet;
+
+    constructor(
+        address _growthWallet,
+        address _liquidityWallet,
+        address _bestowedWallet
+    ) ERC20("TiffyAI", "TIFFY") {
+        growthWallet = _growthWallet;
+        liquidityWallet = _liquidityWallet;
+        bestowedBlessingsWallet = _bestowedWallet;
+
+        _mint(msg.sender, MAX_SUPPLY / 2);           // 50% to deployer
+        _mint(address(this), MAX_SUPPLY / 2);         // 50% held in contract for claims
+    }
+
+    receive() external payable {}
+
+    function claimTiffy() external payable {
+        require(msg.value == CLAIM_FEE_BNB, "Incorrect BNB fee");
+        require(balanceOf(address(this)) >= 1 ether, "Not enough TIFFY to claim");
+
+        // Fixed BNB distribution
+        payable(growthWallet).transfer(0.0006 ether);        // $0.20
+        payable(liquidityWallet).transfer(0.0003 ether);     // $0.10
+        payable(bestowedBlessingsWallet).transfer(0.0003 ether); // $0.10
+
+        // Send 0.99 TIFFY to user
+        _transfer(address(this), msg.sender, 0.99 ether);
+
+        // Burn 0.01 TIFFY
+        _burn(address(this), 0.01 ether);
+    }
+
+    function updateWallets(
+        address _growth,
+        address _liquidity,
+        address _bestowed
+    ) external onlyOwner {
+        growthWallet = _growth;
+        liquidityWallet = _liquidity;
+        bestowedBlessingsWallet = _bestowed;
+    }
+
+    function withdrawBNB() external onlyOwner {
+        payable(owner()).transfer(address(this).balance);
+    }
+}
